@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPA and CGPA Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="bg-gray-100 p-6">
+
+<h1 class="text-3xl font-bold text-center text-blue-600 mb-8">GPA and CGPA Calculator</h1>
+
+<div id="calculator" class="space-y-8">
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-xl font-bold text-gray-700">Semester 1</h2>
+        <table id="sem-1" class="w-full mt-4 border-collapse border border-gray-200">
+            <thead>
+                <tr class="bg-blue-100">
+                    <th class="border border-gray-300 p-2">Course Name (Optional)</th>
+                    <th class="border border-gray-300 p-2">Credit (int)</th>
+                    <th class="border border-gray-300 p-2">Grade (int)</th>
+                    <th class="border border-gray-300 p-2">Action</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <button class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600" onclick="addRow('sem-1')">Add Course</button>
+        <div id="gpa-sem-1" class="text-lg text-gray-700 mt-4">GPA: N/A</div>
+        <div id="cgpa-sem-1" class="text-lg text-green-700 mt-2">CGPA: N/A</div>
+        <div id="calc-sem-1" class="text-sm text-gray-600 mt-2"></div>
+    </div>
+
+    <div id="additional-sems"></div>
+
+    <button class="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600" onclick="addSemester()">Add Semester</button>
+    <div id="cgpa" class="text-2xl text-gray-700 mt-6">Overall CGPA: N/A</div>
+</div>
+
+<div class="mt-10">
+    <h2 class="text-2xl font-bold text-gray-700">GPA and CGPA Graph</h2>
+    <button class="mt-4 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600" onclick="renderGraph()">Render Graph</button>
+    <canvas id="gpaCgpaChart" class="mt-4"></canvas>
+</div>
+
+<button class="mt-4 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600" onclick="exportToCSV()">Export to CSV</button>
+<button class="mt-4 px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600" onclick="exportToPDF()">Export to PDF</button>
+
+
+<script>
+    let semesterCount = 1;
+    const semesterData = {};
+    let gpaHistory = [];
+    let cgpaHistory = [];
+    let labels = [];
+
+    function addRow(semId) {
+        const tableBody = document.querySelector(`#${semId} tbody`);
+        const newRow = document.createElement("tr");
+        newRow.innerHTML = `
+            <td><input type="text" class="border border-gray-300 rounded-lg p-2 w-full" placeholder="Course Name"></td>
+            <td><input type="number" class="credit border border-gray-300 rounded-lg p-2 w-full" placeholder="Credit" oninput="updateGPA('${semId}')"></td>
+            <td><input type="number" class="grade border border-gray-300 rounded-lg p-2 w-full" placeholder="Grade" oninput="updateGPA('${semId}')"></td>
+            <td><button class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600" onclick="removeRow(this)">Remove</button></td>
+        `;
+        tableBody.appendChild(newRow);
+    }
+
+    function removeRow(button) {
+        const row = button.parentElement.parentElement;
+        const table = row.parentElement.parentElement.id;
+        row.remove();
+        updateGPA(table);
+    }
+
+    function updateGPA(semId) {
+        const rows = document.querySelectorAll(`#${semId} tbody tr`);
+        let totalGradePoints = 0, totalCredits = 0;
+
+        rows.forEach(row => {
+            const credit = parseInt(row.querySelector(".credit").value) || 0;
+            const grade = parseInt(row.querySelector(".grade").value) || 0;
+
+            totalGradePoints += credit * grade;
+            totalCredits += credit * 10; // Multiply credit by 10
+        });
+
+        const gpa = totalCredits ? (totalGradePoints / (totalCredits / 10)).toFixed(2) : "N/A";
+        document.querySelector(`#gpa-${semId}`).innerText = `GPA: ${gpa}`;
+        document.querySelector(`#calc-${semId}`).innerText = `Total Grade Points: ${totalGradePoints}, Total Credits: ${totalCredits}`;
+        
+        semesterData[semId] = { gpa: gpa === "N/A" ? 0 : parseFloat(gpa), totalCredits, totalGradePoints };
+        updateCGPA(); // Update CGPA whenever GPA changes
+    }
+
+    function updateCGPA() {
+        let totalGradePoints = 0, totalCredits = 0;
+        cgpaHistory = [];
+        gpaHistory = [];
+        labels = [];
+
+        Object.entries(semesterData).forEach(([semId, { totalGradePoints: semGradePoints, totalCredits: semCredits }], index) => {
+            totalGradePoints += semGradePoints;
+            totalCredits += semCredits;
+
+            const cgpa = totalCredits ? (totalGradePoints / (totalCredits / 10)).toFixed(2) : "N/A";
+            document.querySelector(`#cgpa-${semId}`).innerText = `CGPA: ${cgpa}`;
+            cgpaHistory.push(cgpa === "N/A" ? 0 : parseFloat(cgpa));
+            gpaHistory.push(semesterData[semId].gpa || 0);
+            labels.push(`Semester ${index + 1}`);
+        });
+
+        document.querySelector("#cgpa").innerText = `Overall CGPA: ${totalCredits ? (totalGradePoints / (totalCredits / 10)).toFixed(2) : "N/A"}`;
+    }
+
+
+    function addSemester() {
+        semesterCount++;
+        const semId = `sem-${semesterCount}`;
+        const additionalSem = document.createElement("div");
+
+        additionalSem.classList.add("bg-white", "rounded-lg", "shadow-lg", "p-6", "mt-8");
+        additionalSem.innerHTML = `
+            <h2 class="text-xl font-bold text-gray-700">Semester ${semesterCount}</h2>
+            <table id="${semId}" class="w-full mt-4 border-collapse border border-gray-200">
+                <thead>
+                    <tr class="bg-blue-100">
+                        <th class="border border-gray-300 p-2">Course Name (Optional)</th>
+                        <th class="border border-gray-300 p-2">Credit (int)</th>
+                        <th class="border border-gray-300 p-2">Grade (int)</th>
+                        <th class="border border-gray-300 p-2">Action</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <button class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600" onclick="addRow('${semId}')">Add Course</button>
+            <div id="gpa-${semId}" class="text-lg text-gray-700 mt-4">GPA: N/A</div>
+            <div id="cgpa-${semId}" class="text-lg text-green-700 mt-2">CGPA: N/A</div>
+            <div id="calc-${semId}" class="text-sm text-gray-600 mt-2"></div>
+        `;
+        document.querySelector("#additional-sems").appendChild(additionalSem);
+    }
+
+    function renderGraph() {
+        const ctx = document.getElementById("gpaCgpaChart").getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: "GPA",
+                        data: gpaHistory,
+                        borderColor: "rgba(54, 162, 235, 1)",
+                        backgroundColor: "rgba(54, 162, 235, 0.2)",
+                        borderWidth: 2,
+                        fill: true,
+                    },
+                    {
+                        label: "CGPA",
+                        data: cgpaHistory,
+                        borderColor: "rgba(75, 192, 192, 1)",
+                        backgroundColor: "rgba(75, 192, 192, 0.2)",
+                        borderWidth: 2,
+                        fill: true,
+                    },
+                ],
+            },
+        });
+    }
+
+    function exportToCSV() {
+    let csvContent = "Semester,Course Name,Credit,Grade,GPA,CGPA\n";
+
+    Object.entries(semesterData).forEach(([semId, { gpa, totalGradePoints, totalCredits }], index) => {
+        const rows = document.querySelectorAll(`#${semId} tbody tr`);
+        rows.forEach(row => {
+            const courseName = row.querySelector("input[type=text]").value || "N/A";
+            const credit = row.querySelector(".credit").value || "N/A";
+            const grade = row.querySelector(".grade").value || "N/A";
+            csvContent += `Semester ${index + 1},${courseName},${credit},${grade},${gpa},${cgpaHistory[index] || "N/A"}\n`;
+        });
+    });
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "GPA_CGPA_Data.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function exportToPDF() {
+    const rows = [];
+    rows.push(["Semester", "Course Name", "Credit", "Grade", "GPA", "CGPA"]);
+
+    Object.entries(semesterData).forEach(([semId, { gpa }], index) => {
+        const tableRows = document.querySelectorAll(`#${semId} tbody tr`);
+        tableRows.forEach(row => {
+            const courseName = row.querySelector("input[type=text]").value || "N/A";
+            const credit = row.querySelector(".credit").value || "N/A";
+            const grade = row.querySelector(".grade").value || "N/A";
+            rows.push([`Semester ${index + 1}`, courseName, credit, grade, gpa, cgpaHistory[index] || "N/A"]);
+        });
+    });
+
+    const doc = new jsPDF();
+    doc.autoTable({
+        head: [rows[0]],
+        body: rows.slice(1),
+    });
+    doc.save("GPA_CGPA_Data.pdf");
+}
+
+</script>
+
+</body>
+</html>
